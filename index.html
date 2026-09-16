@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>POS NPS Survey Trigger — Clean-Up Tool</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: #f4f6f9;
+      color: #1a1a2e;
+      min-height: 100vh;
+      padding: 40px 24px;
+    }
+
+    .container {
+      max-width: 780px;
+      margin: 0 auto;
+    }
+
+    header {
+      margin-bottom: 36px;
+    }
+
+    header h1 {
+      font-size: 22px;
+      font-weight: 700;
+      color: #1a1a2e;
+      margin-bottom: 6px;
+    }
+
+    header p {
+      font-size: 13px;
+      color: #6b7280;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 28px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+
+    .card h2 {
+      font-size: 14px;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 18px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .drop-zone {
+      border: 2px dashed #d1d5db;
+      border-radius: 10px;
+      padding: 32px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      position: relative;
+      margin-bottom: 16px;
+    }
+
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: #6366f1;
+      background: #f5f3ff;
+    }
+
+    .drop-zone input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+    }
+
+    .upload-icon {
+      font-size: 32px;
+      margin-bottom: 10px;
+    }
+
+    .upload-label {
+      font-size: 14px;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 4px;
+    }
+
+    .upload-hint {
+      font-size: 12px;
+      color: #9ca3af;
+    }
+
+    .file-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .file-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #ecfdf5;
+      border: 1px solid #a7f3d0;
+      border-radius: 8px;
+      padding: 9px 14px;
+    }
+
+    .file-item-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: #065f46;
+      word-break: break-all;
+    }
+
+    .file-item-size {
+      font-size: 11px;
+      color: #6b7280;
+      margin-top: 2px;
+    }
+
+    .btn-remove {
+      background: none;
+      border: none;
+      color: #ef4444;
+      font-size: 16px;
+      cursor: pointer;
+      padding: 2px 6px;
+      border-radius: 4px;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+
+    .btn-remove:hover { background: #fee2e2; }
+
+    .date-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 4px;
+    }
+
+    .date-row label {
+      font-size: 13px;
+      color: #374151;
+      white-space: nowrap;
+    }
+
+    .date-row input[type="date"] {
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 13px;
+      color: #374151;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .date-row input[type="date"]:focus {
+      border-color: #6366f1;
+    }
+
+    .date-note {
+      font-size: 11px;
+      color: #9ca3af;
+    }
+
+    .btn-run {
+      width: 100%;
+      background: #6366f1;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 14px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+      margin-top: 4px;
+    }
+
+    .btn-run:hover:not(:disabled) {
+      background: #4f46e5;
+    }
+
+    .btn-run:disabled {
+      background: #c7d2fe;
+      cursor: not-allowed;
+    }
+
+    /* Log */
+    #log-section { display: none; }
+
+    .log-box {
+      background: #f8fafc;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 16px;
+      font-size: 12px;
+      font-family: monospace;
+      max-height: 260px;
+      overflow-y: auto;
+      line-height: 1.8;
+    }
+
+    .log-box .ok   { color: #10b981; }
+    .log-box .warn { color: #f59e0b; }
+    .log-box .err  { color: #ef4444; }
+    .log-box .info { color: #6366f1; }
+
+    /* Summary */
+    #summary-section { display: none; }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .stat-box {
+      background: #f5f3ff;
+      border-radius: 10px;
+      padding: 16px;
+      text-align: center;
+    }
+
+    .stat-value {
+      font-size: 26px;
+      font-weight: 700;
+      color: #4f46e5;
+    }
+
+    .stat-label {
+      font-size: 11px;
+      color: #6b7280;
+      margin-top: 4px;
+    }
+
+    .csv-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .csv-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 10px 14px;
+    }
+
+    .csv-item-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: #374151;
+    }
+
+    .csv-item-count {
+      font-size: 11px;
+      color: #9ca3af;
+      margin-top: 2px;
+    }
+
+    .btn-dl {
+      background: #ecfdf5;
+      color: #10b981;
+      border: 1px solid #a7f3d0;
+      border-radius: 6px;
+      padding: 6px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+      white-space: nowrap;
+    }
+
+    .btn-dl:hover {
+      background: #d1fae5;
+    }
+
+    .btn-dl-all {
+      width: 100%;
+      background: #10b981;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 12px;
+      transition: background 0.2s;
+    }
+
+    .btn-dl-all:hover {
+      background: #059669;
+    }
+
+    .reset-link {
+      text-align: center;
+      margin-top: 14px;
+      font-size: 12px;
+      color: #9ca3af;
+    }
+
+    .reset-link a {
+      color: #6366f1;
+      cursor: pointer;
+      text-decoration: none;
+    }
+
+    .reset-link a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <h1>POS NPS Survey Trigger — Clean-Up Tool</h1>
+    <p>Upload one or more Excel files. The tool will clean, deduplicate, and export ready-to-upload CSVs.</p>
+  </header>
+
+  <!-- Step 1: Upload -->
+  <div class="card" id="upload-card">
+    <h2>Step 1 — Upload Excel Files</h2>
+    <div class="drop-zone" id="drop-zone">
+      <input type="file" accept=".xlsx" id="file-input" multiple onchange="handleFiles(this.files)"/>
+      <div class="upload-icon">📂</div>
+      <div class="upload-label">Click to select files, or drag &amp; drop here</div>
+      <div class="upload-hint">Multiple .xlsx files supported — no limit</div>
+    </div>
+    <div class="file-list" id="file-list"></div>
+  </div>
+
+  <!-- Step 2: Date -->
+  <div class="card">
+    <h2>Step 2 — Confirm Today's Date</h2>
+    <div class="date-row">
+      <label>Date to apply to all rows:</label>
+      <input type="date" id="targetDate" />
+      <span class="date-note">Pre-filled with today. Change only if needed.</span>
+    </div>
+  </div>
+
+  <!-- Run button -->
+  <div class="card" style="padding: 20px;">
+    <button class="btn-run" id="btn-run" onclick="runProcess()" disabled>
+      Process Files &amp; Generate CSVs
+    </button>
+  </div>
+
+  <!-- Log -->
+  <div class="card" id="log-section">
+    <h2>Processing Log</h2>
+    <div class="log-box" id="log"></div>
+  </div>
+
+  <!-- Summary & Downloads -->
+  <div class="card" id="summary-section">
+    <h2>Results &amp; Downloads</h2>
+    <div class="summary-grid">
+      <div class="stat-box">
+        <div class="stat-value" id="stat-total">—</div>
+        <div class="stat-label">Total Rows (after clean-up)</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-value" id="stat-orgs">—</div>
+        <div class="stat-label">Org Codes</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-value" id="stat-files">—</div>
+        <div class="stat-label">CSV Files</div>
+      </div>
+    </div>
+    <div class="csv-list" id="csv-list"></div>
+    <button class="btn-dl-all" onclick="downloadAll()">⬇ Download All CSVs</button>
+    <div class="reset-link"><a onclick="resetTool()">↩ Start Over</a></div>
+  </div>
+
+</div>
+
+<script>
+  // ── State ──────────────────────────────────────────────────────────────────
+  let uploadedFiles = []; // array of File objects
+  let csvChunks = [];     // array of { name, content, rows }
+
+  // ── Init date ─────────────────────────────────────────────────────────────
+  (function initDate() {
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm   = String(d.getMonth() + 1).padStart(2, '0');
+    const dd   = String(d.getDate()).padStart(2, '0');
+    document.getElementById('targetDate').value = `${yyyy}-${mm}-${dd}`;
+  })();
+
+  // ── Drag & drop wiring ────────────────────────────────────────────────────
+  (function initDrop() {
+    const zone = document.getElementById('drop-zone');
+    zone.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('dragover'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+    zone.addEventListener('drop', e => {
+      e.preventDefault();
+      zone.classList.remove('dragover');
+      handleFiles(e.dataTransfer.files);
+    });
+  })();
+
+  // ── File handling ─────────────────────────────────────────────────────────
+  function handleFiles(fileList) {
+    for (const file of fileList) {
+      if (!file.name.endsWith('.xlsx')) continue;
+      // Avoid exact duplicates (same name + size)
+      const exists = uploadedFiles.some(f => f.name === file.name && f.size === file.size);
+      if (!exists) uploadedFiles.push(file);
+    }
+    renderFileList();
+    checkReady();
+    // Reset the input so the same file can be re-added after removal
+    document.getElementById('file-input').value = '';
+  }
+
+  function removeFile(idx) {
+    uploadedFiles.splice(idx, 1);
+    renderFileList();
+    checkReady();
+  }
+
+  function renderFileList() {
+    const list = document.getElementById('file-list');
+    list.innerHTML = '';
+    uploadedFiles.forEach((f, i) => {
+      const kb   = (f.size / 1024).toFixed(1);
+      const item = document.createElement('div');
+      item.className = 'file-item';
+      item.innerHTML = `
+        <div>
+          <div class="file-item-name">📄 ${f.name}</div>
+          <div class="file-item-size">${kb} KB</div>
+        </div>
+        <button class="btn-remove" onclick="removeFile(${i})" title="Remove">✕</button>
+      `;
+      list.appendChild(item);
+    });
+  }
+
+  function checkReady() {
+    document.getElementById('btn-run').disabled = uploadedFiles.length === 0;
+  }
+
+  // ── Logging ───────────────────────────────────────────────────────────────
+  function log(msg, type = 'info') {
+    const box = document.getElementById('log');
+    const line = document.createElement('div');
+    line.className = type;
+    line.textContent = msg;
+    box.appendChild(line);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  // ── Date helpers ──────────────────────────────────────────────────────────
+  function getTargetDateStr() {
+    // Returns DD-MM-YYYY from the date input (which gives YYYY-MM-DD)
+    const val = document.getElementById('targetDate').value;
+    if (!val) return null;
+    const [y, m, d] = val.split('-');
+    return `${d}-${m}-${y}`;
+  }
+
+  const DATE_RE = /^\d{2}-\d{2}-\d{4}$/; // DD-MM-YYYY
+
+  function looksLikeDate(val) {
+    if (typeof val !== 'string') return false;
+    return DATE_RE.test(val.trim());
+  }
+
+  // Excel serial date to DD-MM-YYYY
+  function excelSerialToDate(serial) {
+    // Excel epoch: Jan 0, 1900 (with leap-year bug)
+    const utc_days  = Math.floor(serial - 25569);
+    const utc_value = utc_days * 86400 * 1000;
+    const d = new Date(utc_value);
+    const dd   = String(d.getUTCDate()).padStart(2, '0');
+    const mm   = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const yyyy = d.getUTCFullYear();
+    return `${dd}-${mm}-${yyyy}`;
+  }
+
+  // ── Read xlsx ─────────────────────────────────────────────────────────────
+  function readXlsx(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const wb = XLSX.read(e.target.result, { type: 'array', cellDates: false });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          // raw: true gives us raw cell values; we'll handle dates ourselves
+          const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' });
+          resolve(rows);
+        } catch(err) { reject(err); }
+      };
+      reader.onerror = reject;
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  // ── Main process ──────────────────────────────────────────────────────────
+  async function runProcess() {
+    csvChunks = [];
+    document.getElementById('log-section').style.display   = 'block';
+    document.getElementById('summary-section').style.display = 'none';
+    document.getElementById('log').innerHTML = '';
+    document.getElementById('csv-list').innerHTML = '';
+    document.getElementById('btn-run').disabled = true;
+
+    const todayStr = getTargetDateStr();
+    if (!todayStr) { log('❌ Please set a valid date.', 'err'); return; }
+
+    log(`▶ Starting process — target date: ${todayStr}`, 'info');
+
+    try {
+      // ── 1. Read both files ─────────────────────────────────────────────
+      // FIX 1: Skip ALL header-like rows (some files have 2 header rows)
+      const HEADER_VALS = ['org code', 'org_code', 'orgcode', 'setting name', 'setting_name'];
+      function isHeaderRow(row) {
+        const val = String(row[0] || '').toLowerCase().trim();
+        return HEADER_VALS.includes(val);
+      }
+      function extractCols(rows) {
+        return rows
+          .slice(1)                          // skip row 1 (always a header)
+          .filter(r => !isHeaderRow(r))      // skip any additional header rows
+          .map(r => [r[0], r[1], r[2]]);
+      }
+
+      // ── 1. Read all uploaded files ─────────────────────────────────────
+      log(`📁 Files to process: ${uploadedFiles.length}`, 'info');
+      let combined = [];
+      for (const file of uploadedFiles) {
+        log(`📂 Reading "${file.name}" …`, 'info');
+        const rows = await readXlsx(file);
+        const data = extractCols(rows);
+        log(`   → ${data.length} data rows extracted`, 'ok');
+        combined = combined.concat(data);
+      }
+
+      log(`✂ Extracted first 3 columns from all files`, 'ok');
+      log(`🔗 Combined total: ${combined.length} rows`, 'ok');
+
+      // ── 4. Convert all values to string + replace dates with today ─────
+      let datesUpdated = 0;
+      combined = combined.map(row => {
+        return row.map((cell, colIdx) => {
+          let val = cell;
+
+          // Handle numeric Excel serial dates in col 2 (Setting Value)
+          if (colIdx === 2 && typeof val === 'number' && val > 40000 && val < 60000) {
+            val = excelSerialToDate(val);
+          }
+
+          // Convert to string
+          val = (val === null || val === undefined) ? '' : String(val).trim();
+
+          // In col 2, replace any DD-MM-YYYY date with today's date
+          if (colIdx === 2 && looksLikeDate(val)) {
+            val = todayStr;
+            datesUpdated++;
+          }
+
+          return val;
+        });
+      });
+      log(`📅 Dates updated to ${todayStr}: ${datesUpdated} cells`, 'ok');
+
+      // ── 5. Filter out completely empty rows ────────────────────────────
+      combined = combined.filter(r => r[0] !== '' || r[1] !== '' || r[2] !== '');
+      log(`🧹 Empty rows removed. Remaining: ${combined.length}`, 'ok');
+
+      // ── 6. Deduplicate: max 6 rows per Org Code ────────────────────────
+      const orgCount = {};
+      let removed = 0;
+      const deduped = [];
+      for (const row of combined) {
+        const orgCode = row[0];
+        if (!orgCode) { deduped.push(row); continue; } // keep rows without org code but flag
+        orgCount[orgCode] = (orgCount[orgCode] || 0) + 1;
+        if (orgCount[orgCode] <= 6) {
+          deduped.push(row);
+        } else {
+          removed++;
+        }
+      }
+      log(`🔍 Duplicate check: ${removed} extra rows removed (>${'6'} per Org Code)`, removed > 0 ? 'warn' : 'ok');
+
+      const uniqueOrgs = Object.keys(orgCount).length;
+      log(`🏢 Unique Org Codes: ${uniqueOrgs}`, 'ok');
+      log(`📊 Final row count: ${deduped.length}`, 'ok');
+
+      // ── 7. Build header row ────────────────────────────────────────────
+      const HEADER = ['Org Code', 'Setting Name', 'Setting Value'];
+
+      // ── 8. Split into chunks of max 333 org codes (1998 rows) ────────
+      // FIX 2: Split at org code boundaries so no org code is ever split
+      //         across two CSV files.
+      const MAX_ORGS_PER_CHUNK = 333;
+
+      // Group rows by org code, preserving order
+      const orgGroups = {};
+      const orgOrder  = [];
+      for (const row of deduped) {
+        const org = row[0] || '__BLANK__';
+        if (!orgGroups[org]) { orgGroups[org] = []; orgOrder.push(org); }
+        orgGroups[org].push(row);
+      }
+
+      // Pack org groups into chunks
+      const chunks = [];
+      let currentChunk = [];
+      let orgsInChunk  = 0;
+      for (const org of orgOrder) {
+        if (orgsInChunk >= MAX_ORGS_PER_CHUNK) {
+          chunks.push(currentChunk);
+          currentChunk = [];
+          orgsInChunk  = 0;
+        }
+        currentChunk.push(...orgGroups[org]);
+        orgsInChunk++;
+      }
+      if (currentChunk.length > 0) chunks.push(currentChunk);
+      if (chunks.length === 0) chunks.push([]); // edge case: no data
+
+      log(`📁 Splitting into ${chunks.length} CSV file(s)`, 'info');
+
+      // ── 9. Create CSV content for each chunk ──────────────────────────
+      const today     = document.getElementById('targetDate').value; // YYYY-MM-DD
+      const [y, mo, d] = today.split('-');
+      const months    = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      const dateLabel = `${d}-${months[parseInt(mo)-1]}-${String(y).slice(2)}`; // DD-Mon-YY
+
+      chunks.forEach((chunk, idx) => {
+        const suffix   = chunks.length > 1 ? ` Part ${idx + 1}` : '';
+        const filename = `POS NPS Survey Trigger${suffix} ${dateLabel}.csv`;
+        const allRows  = [HEADER, ...chunk];
+        const csvStr   = allRows.map(r =>
+          r.map(cell => {
+            const s = String(cell).replace(/"/g, '""');
+            return /[,"\n\r]/.test(s) ? `"${s}"` : s;
+          }).join(',')
+        ).join('\r\n');
+
+        csvChunks.push({ name: filename, content: csvStr, rows: chunk.length });
+        log(`   ✅ ${filename} — ${chunk.length} rows`, 'ok');
+      });
+
+      // ── 10. Render summary ─────────────────────────────────────────────
+      document.getElementById('stat-total').textContent  = deduped.length.toLocaleString();
+      document.getElementById('stat-orgs').textContent   = uniqueOrgs.toLocaleString();
+      document.getElementById('stat-files').textContent  = chunks.length;
+
+      const listEl = document.getElementById('csv-list');
+      csvChunks.forEach((c, i) => {
+        const item = document.createElement('div');
+        item.className = 'csv-item';
+        item.innerHTML = `
+          <div>
+            <div class="csv-item-name">${c.name}</div>
+            <div class="csv-item-count">${c.rows.toLocaleString()} rows</div>
+          </div>
+          <button class="btn-dl" onclick="downloadOne(${i})">⬇ Download</button>
+        `;
+        listEl.appendChild(item);
+      });
+
+      document.getElementById('summary-section').style.display = 'block';
+      log('✅ All done! Download your CSV files below.', 'ok');
+
+    } catch (err) {
+      log(`❌ Error: ${err.message}`, 'err');
+      console.error(err);
+    }
+
+    document.getElementById('btn-run').disabled = false;
+  }
+
+  // ── Download helpers ──────────────────────────────────────────────────────
+  function downloadOne(idx) {
+    const c = csvChunks[idx];
+    const blob = new Blob([c.content], { type: 'text/csv;charset=utf-8;' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = c.name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function downloadAll() {
+    csvChunks.forEach((_, i) => downloadOne(i));
+  }
+
+  // ── Reset ─────────────────────────────────────────────────────────────────
+  function resetTool() {
+    uploadedFiles = [];
+    csvChunks = [];
+    document.getElementById('file-input').value = '';
+    document.getElementById('file-list').innerHTML = '';
+    document.getElementById('btn-run').disabled = true;
+    document.getElementById('log-section').style.display     = 'none';
+    document.getElementById('summary-section').style.display = 'none';
+    document.getElementById('log').innerHTML = '';
+    document.getElementById('csv-list').innerHTML = '';
+  }
+</script>
+</body>
+</html>
