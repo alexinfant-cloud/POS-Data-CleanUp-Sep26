@@ -152,7 +152,7 @@
       white-space: nowrap;
     }
 
-    .date-row input[type="date"] {
+    .date-row input[type="text"] {
       border: 1px solid #d1d5db;
       border-radius: 8px;
       padding: 8px 12px;
@@ -160,11 +160,29 @@
       color: #374151;
       outline: none;
       transition: border-color 0.2s;
+      width: 130px;
+      letter-spacing: 0.04em;
+      font-variant-numeric: tabular-nums;
     }
 
-    .date-row input[type="date"]:focus {
+    .date-row input[type="text"]:focus {
       border-color: #6366f1;
     }
+
+    .btn-today {
+      background: #eef2ff;
+      color: #4f46e5;
+      border: 1px solid #c7d2fe;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+      white-space: nowrap;
+    }
+
+    .btn-today:hover { background: #e0e7ff; }
 
     .date-note {
       font-size: 11px;
@@ -219,9 +237,13 @@
 
     .summary-grid {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(4, 1fr);
       gap: 12px;
       margin-bottom: 20px;
+    }
+
+    @media (max-width: 600px) {
+      .summary-grid { grid-template-columns: repeat(2, 1fr); }
     }
 
     .stat-box {
@@ -230,6 +252,9 @@
       padding: 16px;
       text-align: center;
     }
+
+    .stat-box.warn { background: #fffbeb; }
+    .stat-box.warn .stat-value { color: #b45309; }
 
     .stat-value {
       font-size: 26px;
@@ -258,6 +283,13 @@
       border-radius: 8px;
       padding: 10px 14px;
     }
+
+    .csv-item.audit {
+      background: #fffbeb;
+      border-color: #fde68a;
+    }
+
+    .csv-item.audit .csv-item-name { color: #92400e; }
 
     .csv-item-name {
       font-size: 13px;
@@ -322,6 +354,50 @@
     .reset-link a:hover {
       text-decoration: underline;
     }
+
+    /* Enterprise fallback card (shown only if live fetch fails) */
+    .ent-note {
+      font-size: 13px;
+      color: #6b7280;
+      line-height: 1.6;
+      margin-bottom: 16px;
+    }
+
+    .ent-actions {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-top: 4px;
+    }
+
+    .btn-retry {
+      background: #fffbeb;
+      color: #b45309;
+      border: 1px solid #fde68a;
+      border-radius: 8px;
+      padding: 8px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .btn-retry:hover { background: #fef3c7; }
+
+    .ent-cancel {
+      font-size: 12px;
+      color: #9ca3af;
+      cursor: pointer;
+    }
+
+    .ent-cancel:hover { color: #ef4444; }
+
+    .ent-status {
+      font-size: 12px;
+      color: #6b7280;
+      margin-top: 10px;
+      min-height: 16px;
+    }
   </style>
 </head>
 <body>
@@ -329,7 +405,7 @@
 
   <header>
     <h1>POS NPS Survey Trigger — Clean-Up Tool</h1>
-    <p>Upload one or more Excel files. The tool will clean, deduplicate, and export ready-to-upload CSVs.</p>
+    <p>Upload one or more Excel files. The tool will clean, deduplicate, exclude Enterprise accounts, and export ready-to-upload CSVs.</p>
   </header>
 
   <!-- Step 1: Upload -->
@@ -349,8 +425,10 @@
     <h2>Step 2 — Confirm Today's Date</h2>
     <div class="date-row">
       <label>Date to apply to all rows:</label>
-      <input type="date" id="targetDate" />
-      <span class="date-note">Pre-filled with today. Change only if needed.</span>
+      <input type="text" id="targetDate" inputmode="numeric" maxlength="10"
+             placeholder="DD-MM-YYYY" autocomplete="off" />
+      <button type="button" class="btn-today" onclick="setToday()">Today</button>
+      <span class="date-note">Format DD-MM-YYYY. Pre-filled with today.</span>
     </div>
   </div>
 
@@ -359,6 +437,27 @@
     <button class="btn-run" id="btn-run" onclick="runProcess()" disabled>
       Process Files &amp; Generate CSVs
     </button>
+  </div>
+
+  <!-- Enterprise fallback (shown only if live sheet fetch fails) -->
+  <div class="card" id="enterprise-fallback" style="display: none; border: 2px solid #f59e0b;">
+    <h2>Enterprise List — Upload Needed</h2>
+    <p class="ent-note">
+      The live fetch of the Enterprise accounts sheet failed — it may not be shared as
+      <strong>"Anyone with the link — Viewer"</strong>. Upload an export of that sheet
+      (.xlsx or .csv, org codes in the first column) to continue.
+    </p>
+    <div class="drop-zone">
+      <input type="file" accept=".xlsx,.csv" id="ent-file-input" onchange="handleEnterpriseFile(this)"/>
+      <div class="upload-icon">🔒</div>
+      <div class="upload-label">Select the Enterprise list file (.xlsx / .csv)</div>
+      <div class="upload-hint">Only the first column (Org Code) is used</div>
+    </div>
+    <div class="ent-actions">
+      <button class="btn-retry" onclick="retryEnterpriseFetch()">↻ Retry live fetch</button>
+      <a class="ent-cancel" onclick="cancelEnterprise()">Cancel processing</a>
+    </div>
+    <div class="ent-status" id="ent-status"></div>
   </div>
 
   <!-- Log -->
@@ -383,6 +482,10 @@
         <div class="stat-value" id="stat-files">—</div>
         <div class="stat-label">CSV Files</div>
       </div>
+      <div class="stat-box warn">
+        <div class="stat-value" id="stat-ent">—</div>
+        <div class="stat-label">Enterprise Rows Excluded</div>
+      </div>
     </div>
     <div class="csv-list" id="csv-list"></div>
     <button class="btn-dl-all" onclick="downloadAll()">⬇ Download All CSVs</button>
@@ -394,15 +497,46 @@
 <script>
   // ── State ──────────────────────────────────────────────────────────────────
   let uploadedFiles = []; // array of File objects
-  let csvChunks = [];     // array of { name, content, rows }
+  let csvChunks = [];     // array of { name, content, rows, audit? }
+
+  // ── CONFIG: Enterprise exclusion sheet ────────────────────────────────────
+  // The tool fetches this Google Sheet live on every run. For the fetch to
+  // work, the sheet's sharing must be set to "Anyone with the link — Viewer".
+  // If the fetch fails, the tool falls back to asking for a file upload of the
+  // same list (first column = Org Code).
+  //
+  // NOTE: a plain fetch() cannot be used here. When this tool is opened as a
+  // local file, the browser blocks cross-origin fetch() to Google (the page
+  // origin is "null"), even for a public sheet. So we use JSONP instead — a
+  // <script> tag is not subject to CORS — via Google's gviz endpoint.
+  const ENTERPRISE_SHEET_ID = '1gjVsOVu_Sk1ojzCZk2nqkvt2kxGExOfKqcrCUEmshoY';
+  const ENTERPRISE_SHEET_GID = '0';
+
+  // Header cells / stray values that must never be treated as org codes
+  const ENT_SKIP_WORDS = new Set([
+    'org code', 'org_code', 'orgcode', 'org', 'setting name', 'setting_name',
+    'active', 'inactive', 'yes', 'no', 'done', 'n/a', 'na', 'test',
+    'true', 'false', '', '-', '--'
+  ]);
 
   // ── Init date ─────────────────────────────────────────────────────────────
-  (function initDate() {
+  // The field is a plain text input so it always displays DD-MM-YYYY,
+  // regardless of the browser/OS locale (a native <input type="date"> renders
+  // in the OS locale — e.g. 10/23/2026 on a US-locale machine).
+  function todayDDMMYYYY() {
     const d = new Date();
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
     const yyyy = d.getFullYear();
-    const mm   = String(d.getMonth() + 1).padStart(2, '0');
-    const dd   = String(d.getDate()).padStart(2, '0');
-    document.getElementById('targetDate').value = `${yyyy}-${mm}-${dd}`;
+    return `${dd}-${mm}-${yyyy}`;
+  }
+
+  function setToday() {
+    document.getElementById('targetDate').value = todayDDMMYYYY();
+  }
+
+  (function initDate() {
+    document.getElementById('targetDate').value = todayDDMMYYYY();
   })();
 
   // ── Drag & drop wiring ────────────────────────────────────────────────────
@@ -471,11 +605,14 @@
 
   // ── Date helpers ──────────────────────────────────────────────────────────
   function getTargetDateStr() {
-    // Returns DD-MM-YYYY from the date input (which gives YYYY-MM-DD)
-    const val = document.getElementById('targetDate').value;
-    if (!val) return null;
-    const [y, m, d] = val.split('-');
-    return `${d}-${m}-${y}`;
+    // The text input already holds DD-MM-YYYY; validate and return it.
+    const val = document.getElementById('targetDate').value.trim();
+    if (!DATE_RE.test(val)) return null;
+    const [dd, mm, yyyy] = val.split('-');
+    const d = new Date(`${yyyy}-${mm}-${dd}T00:00:00`);
+    // Reject impossible dates (e.g. 31-02-2026 rolling over)
+    if (d.getFullYear() !== +yyyy || d.getMonth() + 1 !== +mm || d.getDate() !== +dd) return null;
+    return val;
   }
 
   const DATE_RE = /^\d{2}-\d{2}-\d{4}$/; // DD-MM-YYYY
@@ -513,6 +650,209 @@
       reader.onerror = reject;
       reader.readAsArrayBuffer(file);
     });
+  }
+
+  // ── CSV parsing (for the Enterprise list) ─────────────────────────────────
+  // Minimal CSV parser that handles quoted cells, for Google Sheet exports.
+  function parseCsvText(text) {
+    const rows = [];
+    let row = [], cell = '', inQuotes = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (inQuotes) {
+        if (ch === '"') {
+          if (text[i + 1] === '"') { cell += '"'; i++; }
+          else inQuotes = false;
+        } else cell += ch;
+      } else {
+        if (ch === '"') inQuotes = true;
+        else if (ch === ',') { row.push(cell); cell = ''; }
+        else if (ch === '\n') { row.push(cell); rows.push(row); row = []; cell = ''; }
+        else if (ch === '\r') { /* skip */ }
+        else cell += ch;
+      }
+    }
+    if (cell !== '' || row.length > 0) { row.push(cell); rows.push(row); }
+    return rows;
+  }
+
+  // ── Enterprise list: live fetch with upload fallback ──────────────────────
+  // Loads the sheet via JSONP (script tag) so it works from a local file where
+  // cross-origin fetch() is blocked. Resolves with an array of first-column
+  // values, or null on failure (not shared / offline / no data).
+  function fetchEnterpriseListJsonp(timeoutMs = 12000) {
+    return new Promise((resolve) => {
+      const cbName = '__gvizCb_' + Math.random().toString(36).slice(2);
+      const script = document.createElement('script');
+      let settled = false;
+
+      const cleanup = () => {
+        settled = true;
+        try { delete window[cbName]; } catch (e) { window[cbName] = undefined; }
+        if (script.parentNode) script.parentNode.removeChild(script);
+      };
+
+      const timer = setTimeout(() => {
+        if (settled) return;
+        cleanup();
+        resolve(null);
+      }, timeoutMs);
+
+      window[cbName] = (data) => {
+        if (settled) return;
+        clearTimeout(timer);
+        cleanup();
+        try {
+          if (!data || data.status === 'error' || !data.table) return resolve(null);
+          const rows = data.table.rows || [];
+          const codes = rows
+            .map(r => (r && r.c && r.c[0]) ? String(r.c[0].v ?? '').trim() : '')
+            .filter(Boolean);
+          // gviz includes the header row as the first row; drop it.
+          if (codes.length && /^org\s*code$/i.test(codes[0])) codes.shift();
+          resolve(codes.length ? codes : null);
+        } catch (e) { resolve(null); }
+      };
+
+      script.onerror = () => {
+        if (settled) return;
+        clearTimeout(timer);
+        cleanup();
+        resolve(null);
+      };
+
+      script.src = `https://docs.google.com/spreadsheets/d/${ENTERPRISE_SHEET_ID}/gviz/tq` +
+                   `?tqx=responseHandler:${cbName}&gid=${ENTERPRISE_SHEET_GID}`;
+      document.head.appendChild(script);
+    });
+  }
+
+  async function fetchEnterpriseList() {
+    const codes = await fetchEnterpriseListJsonp();
+    if (codes && codes.length >= 5) return { codes, source: 'live sheet' };
+    return null;
+  }
+
+  function waitForEnterpriseUpload() {
+    // Shows the fallback card and waits until the user uploads a list file
+    // or a retry fetch succeeds. Resolves with { codes, source } or null (cancel).
+    return new Promise((resolve) => {
+      const card = document.getElementById('enterprise-fallback');
+      card.style.display = 'block';
+      document.getElementById('ent-status').textContent = '';
+      window.__resolveEnterprise = (val) => {
+        card.style.display = 'none';
+        window.__resolveEnterprise = null;
+        resolve(val);
+      };
+    });
+  }
+
+  async function handleEnterpriseFile(input) {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    const status = document.getElementById('ent-status');
+    try {
+      status.textContent = `Reading "${file.name}" …`;
+      let codes = [];
+      if (file.name.toLowerCase().endsWith('.csv')) {
+        const text = await file.text();
+        codes = parseCsvText(text).map(r => String(r[0] ?? '').trim()).filter(Boolean);
+      } else {
+        const rows = await readXlsx(file);
+        codes = rows.map(r => String(r[0] ?? '').trim()).filter(Boolean);
+      }
+      if (codes.length === 0) throw new Error('no values found in the first column');
+      log(`📂 Enterprise list loaded from file: "${file.name}" (${codes.length} entries)`, 'ok');
+      window.__resolveEnterprise({ codes, source: 'uploaded file' });
+    } catch (err) {
+      status.textContent = `❌ Couldn't read the file: ${err.message}. Try an .xlsx or .csv export of the Enterprise sheet.`;
+    }
+    input.value = '';
+  }
+
+  async function retryEnterpriseFetch() {
+    const status = document.getElementById('ent-status');
+    status.textContent = 'Retrying live fetch …';
+    const fetched = await fetchEnterpriseList();
+    if (fetched) {
+      log(`🏢 Enterprise list fetched live on retry (${fetched.codes.length} entries)`, 'ok');
+      window.__resolveEnterprise(fetched);
+    } else {
+      status.textContent = '❌ Still cannot fetch the sheet. Upload the list file to continue.';
+    }
+  }
+
+  function cancelEnterprise() {
+    if (window.__resolveEnterprise) window.__resolveEnterprise(null);
+  }
+
+  async function getEnterpriseList() {
+    log('🏢 Fetching Enterprise accounts sheet …', 'info');
+    const fetched = await fetchEnterpriseList();
+    if (fetched) {
+      log(`   → Fetched live: ${fetched.codes.length} entries (${fetched.source})`, 'ok');
+      return fetched;
+    }
+    log('⚠️ Live fetch failed — the sheet may not be shared as "Anyone with the link — Viewer".', 'warn');
+    log('⏸ Upload the Enterprise list file below to continue (or retry the live fetch) …', 'info');
+    return await waitForEnterpriseUpload();
+  }
+
+  // ── Enterprise matching ──────────────────────────────────────────────────
+  // Builds a Set of normalized org codes. Handles:
+  //  • case differences           ("Tpcodl" vs "TPCODL")
+  //  • stray internal spaces      ("NAGAR_ NIGAM X" vs "NAGAR_NIGAM_X")
+  //  • two codes in one cell      ("A_CODE / B_CODE" — split on / or //)
+  //  • trailing "(number)" IDs   ("NAME (200887)" → also adds "NAME")
+  function buildEnterpriseSet(rawCodes) {
+    const set = new Set();
+    let skipped = 0;
+    for (let raw of rawCodes) {
+      if (raw == null) continue;
+      const cell = String(raw).trim();
+      if (!cell) continue;
+      // Split cells that hold multiple codes ("A / B" or "A // B")
+      const parts = cell.split(/\s*\/{1,2}\s*/);
+      for (let part of parts) {
+        let code = part.trim();
+        if (!code) continue;
+        // Strip a trailing parenthetical ID, e.g. "DORABJEE_AND_CO_PVT_LT (200887)"
+        let noParen = code;
+        const m = code.match(/^(.*?)\s*\(\s*\d+\s*\)\s*$/);
+        if (m) noParen = m[1].trim();
+        for (const variant of [...new Set([code, noParen])]) {
+          if (!variant) continue;
+          const key = variant.toUpperCase().replace(/\s+/g, ' ').trim();
+          if (ENT_SKIP_WORDS.has(key.toLowerCase())) { skipped++; continue; }
+          if (key.length < 2) { skipped++; continue; }
+          set.add(key);
+          // Aggressive variant: strip all non-alphanumerics (catches underscore/space drift)
+          const aggressive = variant.toUpperCase().replace(/[^A-Z0-9]/g, '');
+          if (aggressive.length >= 3) set.add(aggressive);
+        }
+      }
+    }
+    return { set, skipped };
+  }
+
+  function isEnterpriseOrg(eset, orgCode) {
+    const c = String(orgCode || '').trim();
+    if (!c) return false;
+    const key = c.toUpperCase().replace(/\s+/g, ' ').trim();
+    if (eset.has(key)) return true;
+    const aggressive = c.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    return aggressive.length >= 3 && eset.has(aggressive);
+  }
+
+  // ── CSV string builder (same quoting rules as before) ─────────────────────
+  function toCsvString(rows) {
+    return rows.map(r =>
+      r.map(cell => {
+        const s = String(cell).replace(/"/g, '""');
+        return /[,"\n\r]/.test(s) ? `"${s}"` : s;
+      }).join(',')
+    ).join('\r\n');
   }
 
   // ── Main process ──────────────────────────────────────────────────────────
@@ -587,6 +927,32 @@
       combined = combined.filter(r => r[0] !== '' || r[1] !== '' || r[2] !== '');
       log(`🧹 Empty rows removed. Remaining: ${combined.length}`, 'ok');
 
+      // ── 5B. NEW: Exclude Enterprise accounts ───────────────────────────
+      // Loads the Enterprise org code list (live Google Sheet fetch, with
+      // a manual file upload as fallback) and removes all matching rows.
+      const ent = await getEnterpriseList();
+      if (!ent) throw new Error('Enterprise list is required — processing cancelled.');
+
+      const { set: entSet, skipped: entSkipped } = buildEnterpriseSet(ent.codes);
+      log(`🏢 Enterprise list ready: ${ent.codes.length} entries` +
+          (entSkipped > 0 ? ` (${entSkipped} header/junk values skipped)` : ''), 'ok');
+
+      let removedRows = [];
+      const keptRows = [];
+      for (const row of combined) {
+        if (isEnterpriseOrg(entSet, row[0])) removedRows.push(row);
+        else keptRows.push(row);
+      }
+      const removedOrgs = [...new Set(removedRows.map(r => r[0]))];
+      combined = keptRows;
+      log(`🏢 Enterprise accounts excluded: ${removedRows.length} rows (${removedOrgs.length} org codes)`,
+          removedRows.length > 0 ? 'warn' : 'ok');
+      if (removedOrgs.length > 0) {
+        const preview = removedOrgs.slice(0, 5).join(', ');
+        log(`   e.g. ${preview}${removedOrgs.length > 5 ? ', …' : ''}`, 'info');
+      }
+      log(`📊 Rows remaining after Enterprise exclusion: ${combined.length}`, 'ok');
+
       // ── 6. Deduplicate: max 6 rows per Org Code ────────────────────────
       const orgCount = {};
       let removed = 0;
@@ -643,8 +1009,7 @@
       log(`📁 Splitting into ${chunks.length} CSV file(s)`, 'info');
 
       // ── 9. Create CSV content for each chunk ──────────────────────────
-      const today     = document.getElementById('targetDate').value; // YYYY-MM-DD
-      const [y, mo, d] = today.split('-');
+      const [d, mo, y] = todayStr.split('-'); // todayStr is DD-MM-YYYY
       const months    = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
       const dateLabel = `${d}-${months[parseInt(mo)-1]}-${String(y).slice(2)}`; // DD-Mon-YY
 
@@ -652,30 +1017,34 @@
         const suffix   = chunks.length > 1 ? ` Part ${idx + 1}` : '';
         const filename = `POS NPS Survey Trigger${suffix} ${dateLabel}.csv`;
         const allRows  = [HEADER, ...chunk];
-        const csvStr   = allRows.map(r =>
-          r.map(cell => {
-            const s = String(cell).replace(/"/g, '""');
-            return /[,"\n\r]/.test(s) ? `"${s}"` : s;
-          }).join(',')
-        ).join('\r\n');
+        const csvStr   = toCsvString(allRows);
 
         csvChunks.push({ name: filename, content: csvStr, rows: chunk.length });
         log(`   ✅ ${filename} — ${chunk.length} rows`, 'ok');
       });
 
+      // ── 9B. NEW: Audit CSV with every excluded Enterprise row ─────────
+      if (removedRows.length > 0) {
+        const auditName = `POS NPS Enterprise Excluded ${dateLabel}.csv`;
+        const auditStr  = toCsvString([HEADER, ...removedRows]);
+        csvChunks.push({ name: auditName, content: auditStr, rows: removedRows.length, audit: true });
+        log(`   🧾 ${auditName} — ${removedRows.length} rows (audit of excluded rows)`, 'ok');
+      }
+
       // ── 10. Render summary ─────────────────────────────────────────────
       document.getElementById('stat-total').textContent  = deduped.length.toLocaleString();
       document.getElementById('stat-orgs').textContent   = uniqueOrgs.toLocaleString();
-      document.getElementById('stat-files').textContent  = chunks.length;
+      document.getElementById('stat-files').textContent  = csvChunks.length;
+      document.getElementById('stat-ent').textContent    = removedRows.length.toLocaleString();
 
       const listEl = document.getElementById('csv-list');
       csvChunks.forEach((c, i) => {
         const item = document.createElement('div');
-        item.className = 'csv-item';
+        item.className = c.audit ? 'csv-item audit' : 'csv-item';
         item.innerHTML = `
           <div>
             <div class="csv-item-name">${c.name}</div>
-            <div class="csv-item-count">${c.rows.toLocaleString()} rows</div>
+            <div class="csv-item-count">${c.rows.toLocaleString()} rows${c.audit ? ' — excluded from output (audit)' : ''}</div>
           </div>
           <button class="btn-dl" onclick="downloadOne(${i})">⬇ Download</button>
         `;
@@ -722,6 +1091,7 @@
     document.getElementById('summary-section').style.display = 'none';
     document.getElementById('log').innerHTML = '';
     document.getElementById('csv-list').innerHTML = '';
+    document.getElementById('enterprise-fallback').style.display = 'none';
   }
 </script>
 </body>
